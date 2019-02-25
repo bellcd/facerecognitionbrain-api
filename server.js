@@ -33,10 +33,10 @@ app.post('/signin', (req, res) => {
           })
           .catch(err => res.status(400).json("unable to get user"));
       } else {
-        res.status(400).json("wrong credentials");
+        res.status(400).json("isValid false - wrong credentials");
       }
     })
-    .catch(err => res.status(400).json("wrong credentials"));
+    .catch(err => res.status(400).json("wrong credentials"))
 })
 
 app.post('/register', (req, res) => {
@@ -68,8 +68,6 @@ app.post('/register', (req, res) => {
       .catch(trx.rollback)
     })
     .catch(err => res.status(400).json('unable to register'))
-
-
 })
 
 app.get('/profile/:id', (req, res) => {
