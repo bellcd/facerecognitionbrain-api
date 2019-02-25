@@ -12,75 +12,60 @@ const db = require('knex')({
   }
 });
 
-db.select("*").from("users").then(data => {
-  console.log(data);
-});
-
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
-
-const database = {
-  users: [
-    {
-      id: "123",
-      name: "John",
-      email: "john@gmail.com",
-      password: "cookies",
-      entries: 0,
-      joined: new Date()
-    },
-    {
-      id: "124",
-      name: "Sally",
-      email: "sally@gmail.com",
-      password: "bananas",
-      entries: 0,
-      joined: new Date()
-    }
-  ],
-  login: [
-    {
-      id: "987",
-      hash: "",
-      email: "john@gmail.com"
-    }
-  ]
-}
 
 app.get("/", (req, res) => {
   res.send(database.users);
 })
 
 app.post('/signin', (req, res) => {
-  bcrypt.compare("apples", "$2a$10$3xF7rkWVgwyD9/6rsxYEvOXbToe9mdRYNucn3VBHSQ1ZB89Qnkvmq", function(err, res) {
-      console.log("first guess", res);
-  });
-
-  bcrypt.compare("veggies", "$2a$10$3xF7rkWVgwyD9/6rsxYEvOXbToe9mdRYNucn3VBHSQ1ZB89Qnkvmq", function(err, res) {
-      console.log("second guess", res);
-  });
-
-  if (req.body.email === database.users[0].email &&
-      req.body.password === database.users[0].password) {
-        res.json(database.users[0])
+  db.select("email", 'hash').from('login')
+    .where('email', '=', req.body.email)
+    .then(data => {
+      const isValid = bcrypt.compareSync(req.body.password, data[0].hash);
+      if (isValid) {
+        return db.select("*").from("users")
+          .where("email", "=", req.body.email)
+          .then(user => {
+            res.json(user[0]);
+          })
+          .catch(err => res.status(400).json("unable to get user"));
       } else {
-        res.status(400).json('error logging in');
+        res.status(400).json("wrong credentials");
       }
+    })
+    .catch(err => res.status(400).json("wrong credentials"));
 })
 
 app.post('/register', (req, res) => {
   const { email, name, password } = req.body;
 
-  db('users')
-    .returning('*')
-    .insert({
-      email: email,
-      name: name,
-      joined: new Date()
-    })
-    .then(user => {
-      res.json(user[0]);
+  // bcrypt done synchronously... done this way for simplicity. Asnyc would be a good upgrade.
+  const hash = bcrypt.hashSync(password);
+
+    db.transaction(trx => {
+      trx.insert({
+        hash: hash,
+        email: email
+      })
+      .into('login')
+      .returning('email')
+      .then(loginEmail => {
+        return trx('users')
+          .returning('*')
+          .insert({
+            email: loginEmail[0],
+            name: name,
+            joined: new Date()
+          })
+          .then(user => {
+            res.json(user[0]);
+          })
+      })
+      .then(trx.commit)
+      .catch(trx.rollback)
     })
     .catch(err => res.status(400).json('unable to register'))
 
@@ -112,11 +97,6 @@ app.put("/image", (req, res) => {
   })
   .catch(err => res.status(400).json("unable to get entries"));
 });
-
-
-
-
-
 
 app.listen(3000, () => {
   console.log('app is running on port 3000');
